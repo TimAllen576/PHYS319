@@ -45,12 +45,15 @@ def read_station_data_file(filename):
 
 
 
-filename='DAex5_data1.dat'
-[lat,lon, datetime_array,temperature_array]=read_station_data_file(filename)
 
-plt.plot(datetime_array,temperature_array)
-plt.xlim(datetime.datetime(1980,1,1,0,0,0),datetime.datetime(1985,1,1,0,0,0))
-plt.ylim(-10.0,20.0)
-plt.xlabel('Date')
-plt.ylabel('Temperature ($^o$C)')
+
+def plotter():
+    "put it in a function so I can import"
+    filename='DAex5_data1.dat'
+    [lat,lon, datetime_array,temperature_array]=read_station_data_file(filename)
+    plt.plot(datetime_array,temperature_array)
+    plt.xlim(datetime.datetime(1980,1,1,0,0,0),datetime.datetime(1985,1,1,0,0,0))
+    plt.ylim(-10.0,20.0)
+    plt.xlabel('Date')
+    plt.ylabel('Temperature ($^o$C)')
 
