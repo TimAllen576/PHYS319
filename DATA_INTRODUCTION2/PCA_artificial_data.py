@@ -10,7 +10,7 @@ Updated on 21/7/2023
 import numpy as np
 import matplotlib.pyplot as plt
 
-from library import Principal_Component_Analysis
+from library2 import Principal_Component_Analysis
 
 
 # main code here
@@ -61,11 +61,8 @@ def main():
         plt.pcolor(np.reshape(eigen_vectors[:,j],(13,13)))
         plt.subplot(2,1,2)
         plt.plot(PC[:,j])
-        plt.savefig('PCA_Test_%04d.png' %j)  # ensures that ordering is nice
-    return eigen_values,eigen_vectors,anomaly,covariance
+        plt.savefig('PCA_Test_%01d.png' %j)  # ensures that ordering is nice
     
-#main()
-
-eigen_values,eigen_vectors,anomaly,covariance = main()
+main()
 
     

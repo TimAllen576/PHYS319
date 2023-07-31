@@ -44,10 +44,7 @@ def read_station_data_file(filename):
     return lat,lon, datetime_array,temperature_array
 
 
-
-
-
-def plotter():
+def plotter_ex_given():
     "put it in a function so I can import"
     filename='DAex5_data1.dat'
     [lat,lon, datetime_array,temperature_array]=read_station_data_file(filename)

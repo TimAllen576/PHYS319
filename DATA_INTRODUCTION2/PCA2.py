@@ -5,41 +5,44 @@ Created on Fri Jul 28 10:18:33 2023
 @author: tal75
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
 import glob
+import pandas as pd
 
-from library import Principal_Component_Analysis
 from read_station_data import read_station_data_file
 
 def load_all_data():
-    "Loads all data in the dir Station_data"
-    cache = []
-    lat = []
+    "Loads all data in the dir Station_data into arrays lat,lon, and date and temp into a dataframe and returns them"
+    lat = []        # Initializing vars
     lon = []
-    datetime_array = np.empty(0)
-    temperature_array = np.empty((1,1))
-    #for path in glob.glob("P:/My\ Documents/PHYS381/DATA_INTRODUCTION2/Station_data/**", recursive= True ):
-    for path in glob.glob("Station_data/*/*")[0:40]:
+    start_date  = None
+    end_date  = None
+    time_ntemp_df = pd.DataFrame()
+
+    for path in glob.glob("Station_data/*/*"):
         cache = read_station_data_file(path)
         lat.append(cache[0])
         lon.append(cache[1])
-        datetime_array = np.array([datetime_array, cache[2]])
-        temperature_array = np.array([temperature_array, cache[3]])
-    return lat,lon, datetime_array,temperature_array
+        dates = cache[2]
+        values = cache[3]
+
+        if start_date  is None or min(dates) < start_date :     # Determines the earliest and latest observations to appropriately size the dataframe
+            start_date  = min(dates)
+        if end_date  is None or max(dates) > end_date :
+            end_date  = max(dates)
+
+        cache_df = pd.DataFrame(data=values, index=dates, columns=[path])   # Create a temporary dataframe for each file and interpolate missing values
+        cache_date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
+        cache_df = cache_df.reindex(cache_date_range)
+        cache_df.interpolate(method='linear', axis=0, inplace=True)
+
+        time_ntemp_df = pd.concat([time_ntemp_df, cache_df], axis=1) # Merge the temporary dataframe into the main dataframe
+    return lat,lon, time_ntemp_df
 
 def main():
     "Do the thingy"
-    lat,lon, datetime_array,temperature_array= load_all_data()
-    [eigen_values,eigen_vectors,anomaly,covariance]=Principal_Component_Analysis(temperature_array)
-    PC=np.matmul(anomaly,eigen_vectors)
-    for j in [-1]: #,-2,-3]:     # plot the last three values in the PCA analysis - note ordering
-        plt.figure()
-        plt.subplot(2,1,1)
-        #plt.pcolor(np.reshape(eigen_vectors[:,j],(13,13)))
-        plt.subplot(2,1,2)
-        plt.plot(PC[:,j])
-        plt.savefig('PCA_Test_%04d.png' %j)  # ensures that ordering is nice
-    return eigen_values,eigen_vectors,anomaly,covariance, lat,lon, datetime_array,temperature_array
+    lat,lon, tt_df= load_all_data()
+    #print(f'Latitude = {lat}')
+    #print(f'Longitude = {lon}')
+    #print(f'Temperature dataframe = {tt_df}')
 
-eigen_values,eigen_vectors,anomaly,covariance, lat,lon, datetime_array,temperature_array = main()
+main()
