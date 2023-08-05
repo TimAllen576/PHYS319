@@ -30,17 +30,17 @@ def plotter(x, y):
 
 
 def main():
-    "Doofenshmirtz evil incorporatedd"    
+    "Doofenshmirtz evil incorporated"    
     hours, vel = np.genfromtxt("DAex7data.txt")[:,0], np.genfromtxt("DAex7data.txt")[:,1]
-    nfft = max(hours)
-    H = np.fft.fft(vel)
-    mx = abs(H[1:int(nfft/2)])*(2.0/nfft)
-    period = nfft/np.arange(1,int(nfft/2))
-    if mx[11] > mx[23]:
+    l_fourier = len(hours) # length of FT
+    fourier = np.fft.fft(vel)
+    fourier_half = abs(fourier[1:int(l_fourier/2)])*(2.0/l_fourier) # Cut off duplicate half of FT and rescale 
+    period = l_fourier/np.arange(1,int(l_fourier/2))    # 0 value skipped
+    if fourier_half[11] > fourier_half[23]:
         print("The semi-diurnal tide is largest during this period")
     else:
         print("The diurnal tide is largest during this period")
-    plotter(period, mx)
+    plotter(period, fourier_half)
     
 main()
 

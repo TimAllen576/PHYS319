@@ -14,10 +14,6 @@ from scipy.stats import ttest_ind
 from seaborn import displot
 
 
-def load_file(filename):
-    "Loads the data"
-    data = np.genfromtxt(filename)
-    return data
         
 def mean_and_num(data):
     "Finds the mean and number of entries then returns both"
@@ -50,9 +46,9 @@ def incbeta_f(num1,num2,t):
     
 def sig_dif_means(filename1, filename2):
     "Does the first thing"
-    SampleA = load_file(filename1)
+    SampleA = np.genfromtxt(filename1)
     SampleA = SampleA[~np.isnan(SampleA)] # removes nans
-    SampleB = load_file(filename2)
+    SampleB = np.genfromtxt(filename2)
     SampleB = SampleB[~np.isnan(SampleB)] # removes nans
     p_val = ttest_ind(SampleA, SampleB, equal_var= False).pvalue
     print(f"With Scipy probability functions the p-value that the two samples {filename1}, {filename2} have identical means is:  {p_val}")

@@ -60,7 +60,7 @@ def plotter(temps, time, res):
     plt.plot(time, temps)
     y_new = model_func(res, time)
     plt.plot(time, y_new)
-    #plt.xlim(0, 5000)   # Zoom in
+    #plt.xlim(0, 5000)      # Zoom in
     plt.show(block = False)
 
 

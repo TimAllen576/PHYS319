@@ -9,8 +9,8 @@ Created on Tue Jul 18 10:53:16 2023
 import numpy as np
 import matplotlib.pyplot as plt
 
-from library import incbeta_f
-from scipy.stats import pearsonr
+from Excersize_1 import incbeta_f
+#from scipy.stats import pearsonr
 #from scipy.special import betainc
 
 
