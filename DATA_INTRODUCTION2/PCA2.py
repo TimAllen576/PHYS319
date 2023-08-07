@@ -40,7 +40,7 @@ def load_all_data():
 
 def main():
     "Do the thingy"
-    lat,lon, tt_df= load_all_data()
+    lat,lon, tt_df= load_all_data() # Overdone cos I misread the question but it works
     #print(f'Latitude = {lat}')
     #print(f'Longitude = {lon}')
     #print(f'Temperature dataframe = {tt_df}')
