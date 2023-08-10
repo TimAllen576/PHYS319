@@ -16,7 +16,7 @@ def load_all_data():
     end_date  = None
     time_ntemp_df = pd.DataFrame()
 
-    for path in glob.glob("Station_data/*/*")[:40]:
+    for path in glob.glob("Station_data/*/*"):
         cache = read_station_data_file(path)
         dates = cache[2]
         values = cache[3]
@@ -26,7 +26,7 @@ def load_all_data():
         if end_date  is None or max(dates) > end_date :
             end_date  = max(dates)
 
-        meta_data_tuples = [(cache[0], cache[1], path)]     # Inserting latitude and longitude data into dataframe
+        meta_data_tuples = [(cache[0], cache[1]*-1, path)]     # Inserting latitude and longitude data into dataframe
         column_data = pd.MultiIndex.from_tuples(meta_data_tuples, names=["Latitude", "Longitude", "Station"])
 
         cache_df = pd.DataFrame(data=values, index=dates, columns=column_data)   # Create a temporary dataframe for each file and interpolate missing values
@@ -36,10 +36,3 @@ def load_all_data():
         time_ntemp_df = pd.concat([time_ntemp_df, cache_df], axis=1) # Merge the temporary dataframe into the main dataframe
 
     return time_ntemp_df
-
-def main():
-    "Do the thingy"
-    tt_df= load_all_data() # Overdone cos I misread the question but it works
-    #print(f'Temperature dataframe:\n{tt_df}')
-
-main()

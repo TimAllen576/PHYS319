@@ -1,10 +1,4 @@
-
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-
-from read_station_data import datetime_array_create
-from PCA_artificial_data import Principal_Component_Analysis
 from PCA2 import load_all_data
 
 #z = np.ma.masked_values([1.0, 1.e20, 3.0, 4.0], 1.e20)
@@ -19,7 +13,7 @@ def invalid_data_stripper(tt_df):
     """
     temperature_time_stripped = tt_df.loc['1990-01-01':'2005-12-01']
     for column in temperature_time_stripped.columns:
-        if any(temperature_time_stripped[column].isin([-99.0])):
+        if any(np.logical_or(temperature_time_stripped[column].isin([-99.0]), np.isnan(temperature_time_stripped[column]))):
             temperature_time_stripped = temperature_time_stripped.drop(columns = column)
     return temperature_time_stripped
 
@@ -31,9 +25,12 @@ def main():
     val_i = np.any(np.where(temperature_time_good == -99.0, True , False))
     print(f'Invalid entries: {val_i}')    #check for an invalid entries
 
+    NaN_i = np.any(np.isnan(temperature_time_good))
+    print(f'NaN entries: {NaN_i}')    #check for NaN entries
+
     latitude, longitude, station = zip(*temperature_time_good.columns)
     latitude_array, longitude_array, station_array = np. asarray(latitude), np. asarray(longitude), np. asarray(station)
-    temperature_array = temperature_time_good.to_numpy()    # Converts all pandas info to numyp arrays
+    temperature_array = temperature_time_good.to_numpy()    # Converts all pandas info to numpy arrays
 
     np.savez(
         "good_station_data",
