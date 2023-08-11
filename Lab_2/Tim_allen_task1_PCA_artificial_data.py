@@ -68,14 +68,13 @@ def main():
     y=data_gen()
     [eigen_values,eigen_vectors,anomaly,covariance]=Principal_Component_Analysis(y)
     PC=np.matmul(anomaly,eigen_vectors)
-    print(np.shape(PC), np.shape(anomaly),np.shape(eigen_vectors))
     for j in [-1,-2,-3]:     # plot the last three values in the PCA analysis - note ordering
         plt.figure()
         plt.subplot(2,1,1)
         plt.pcolor(np.reshape(eigen_vectors[:,j],(13,13)))
         plt.subplot(2,1,2)
         plt.plot(PC[:,j])
-        #plt.savefig('PCA_Test_%01d.png' %j)  # ensures that ordering is nice
+        plt.savefig('PCA_Test_%01d.png' %j)  # ensures that ordering is nice
     
 #main()     # Comment after use to keep imports clean
 

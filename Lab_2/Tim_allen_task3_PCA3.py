@@ -1,10 +1,8 @@
-import numpy as np
-from PCA2 import load_all_data
 
-#z = np.ma.masked_values([1.0, 1.e20, 3.0, 4.0], 1.e20)
-#val = [0, 0, 5, 6, 5]
-#val_i = np.where(val == -99.0, True , False)
-#print(f'joe mama{val_i}')
+
+import numpy as np
+from Tim_allen_task2_PCA2 import load_all_data
+
 
 def invalid_data_stripper(tt_df):
     """takes a dataframe, slices to dates between Jan 1990 and Dec 2005 then drops columns with invalid data(-99.0)

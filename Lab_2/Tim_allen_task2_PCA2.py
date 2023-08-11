@@ -5,10 +5,12 @@ Created on Fri Jul 28 10:18:33 2023
 @author: tal75
 """
 
+
 import glob
 import pandas as pd
 
 from read_station_data import read_station_data_file
+
 
 def load_all_data():
     "Loads all data in the dir Station_data into arrays lat,lon, and date and temp into a dataframe and returns them"

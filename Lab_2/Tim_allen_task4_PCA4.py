@@ -1,11 +1,11 @@
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
-from PCA_artificial_data import Principal_Component_Analysis
-
-
+from Tim_allen_task1_PCA_artificial_data import Principal_Component_Analysis
 
 
 def plotter(eigen_vectors, PC, latitude, longitude):
@@ -25,7 +25,6 @@ def plotter(eigen_vectors, PC, latitude, longitude):
 
     fig2 = plt.figure()
     ax2 = fig2.add_subplot()
-    #time = datetime_array_create(1990,2006)
     ax2.plot(PC[:,-1])
     
     plt.savefig('PCA4_timeseries.png')
