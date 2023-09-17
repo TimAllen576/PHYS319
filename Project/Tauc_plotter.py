@@ -16,10 +16,12 @@ import matplotlib.pyplot as plt
 from scipy import signal
 from matplotlib.widgets import Slider
 
+import extractor
+
 
 LOWTFILE = "20230906 REAL554 PHYS381 LowT.csv"
 HIGHTFILE = "20230912 REAL554 PHYS381 HighT.csv"
-HEADER_LEN = 2   # Different header types would require redoing a lot of code
+HEADER_LEN = 2   # Different header types could require redoing a lot of code
 #NUM_MEASURES = 3201 # Comment for preferred way of giving number of values
 INI_WAVELENGTH = 1000
 FINAL_WAVELENGTH = 200
@@ -189,6 +191,7 @@ def linear_region_extrapolater(scaled_df):
         max_index = signal.argrelextrema(derivative_array,
                                          np.greater,
                                          order=extrema_width)[0][1:-1] # testing slice
+        
         # Testing
         plt.plot(scaled_df["Energy","eV"], derivative_array)
         idx=max_index
@@ -199,6 +202,7 @@ def linear_region_extrapolater(scaled_df):
         plt.vlines(scaled_df["Energy","eV"][idx-extrema_width],
                     0, 60, linestyles='dashed')
         plt.show()
+
         max_deriv = derivative_array[max_index]
         max_deriv_data = scaled_df["ahv_data", temperature][max_index]
         max_deriv_energy = scaled_df["Energy","eV"][max_index]
@@ -239,8 +243,7 @@ class InteractivePlot:
         #         "b.",markersize=1, alpha = 0.5)
         self.demo_data["data_deriv",self.temperature] = smooth_n_deriv(
             self.demo_data["ahv_data", self.temperature],
-            self.energy,
-            FILTER_WINDOW, FILTER_ORDER)
+            self.energy, FILTER_WINDOW, FILTER_ORDER)
         self.current,=self.ax.plot(self.energy,
                 self.demo_data["data_deriv", self.temperature],
                 "r-",linewidth=0.5)
@@ -266,16 +269,18 @@ def tauc_plotter(scaled_df):#, linear_region_df):
     Returns: None
     Shows plot.
     """
-    #formatting
+    # Linear region disappears?
     for temperature in scaled_df["ahv_data"].columns[1:5]:            # temp slice
         temperature_label = temperature.rstrip("(ahv)")
         plt.plot(scaled_df[("Energy","eV")], scaled_df["ahv_data",temperature],
                  label=temperature_label)
+        
         # max_deriv, linear_region_yint = linear_region_df[temperature]
         # band_gap = -linear_region_yint/max_deriv
         # linear_region_line = max_deriv * scaled_df[("Energy","eV")] + linear_region_yint
         # plt.plot(scaled_df[("Energy","eV")], linear_region_line, "--",
         #          label=f"{temperature_label} band-gap: {band_gap:.3f}")
+
     plt.xlabel("Photon energy (eV)")
     plt.xlim(0, 5.5)
     plt.ylabel(r"$(\alpha h v)^{1/r}$")
@@ -285,6 +290,20 @@ def tauc_plotter(scaled_df):#, linear_region_df):
     plt.savefig("Tauc-like plot")
     plt.show()
 
+def other_tests(data):
+    """
+    Creates CSVs with single columns of data to run with other tools
+    """
+    wavelength = data.iloc[:, 0]
+    values = data.iloc[:, 1:]
+    new_values = values + 1 + np.sqrt(4*values**2+8*values)
+    new_data = pd.concat([wavelength, new_values], axis=1)
+    #print(new_data)
+    extractor.autoextract(new_data, 'example-output',
+                          'Ex_other_tools',intensity_scale=100,
+                          verbose=True)
+    
+
 def main():
     """Main function to take UV-Vis spec data and create Tauc-like plots
     determining bandgap temperature dependance."""
@@ -293,10 +312,13 @@ def main():
     usingdata, allbaselines = data_cleaner(lowTdata, highTdata)
     scaled_df = scale_n_differentiate(usingdata)
 
+    other_tests(usingdata[1245:3000])
+
     # demo = InteractivePlot(scaled_df.iloc[:, [0, 25]])
     # demo.show()
-    #linear_region_df = linear_region_extrapolater(scaled_df)
-    tauc_plotter(scaled_df)#, linear_region_df)
+
+    # linear_region_df = linear_region_extrapolater(scaled_df)
+    # tauc_plotter(scaled_df)#, linear_region_df)
 
 if __name__ == "__main__":
     main()
