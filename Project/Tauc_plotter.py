@@ -178,7 +178,7 @@ def gaussian_smooth(rough_data, energy, sigma, *args):
     derived_data = np.gradient(smooth_data,energy)
     return derived_data
 
-def linear_region_extrapolater(scaled_df):
+def linear_region_extrapolater(scaled_df, test=False):
     """
     Calculates the band gap using Tauc-like plots from a line built
     from the max derivative. order should be around the width of the
@@ -206,17 +206,17 @@ def linear_region_extrapolater(scaled_df):
                                          np.greater,
                                          order=extrema_width)[0][-2] # testing slice
         
-        # Testing
-        plt.plot(scaled_df["Energy","eV"], derivative_array)
-        idx=max_index
-        plt.vlines(scaled_df["Energy","eV"][idx],
-                    0, 60)
-        plt.vlines(scaled_df["Energy","eV"][idx+extrema_width],
-                    0, 60, linestyles='dashed')
-        plt.vlines(scaled_df["Energy","eV"][idx-extrema_width],
-                    0, 60, linestyles='dashed')
-        plt.grid(True)
-        plt.show()
+        if test:
+            plt.plot(scaled_df["Energy","eV"], derivative_array)
+            idx=max_index
+            plt.vlines(scaled_df["Energy","eV"][idx],
+                        0, 60)
+            plt.vlines(scaled_df["Energy","eV"][idx+extrema_width],
+                        0, 60, linestyles='dashed')
+            plt.vlines(scaled_df["Energy","eV"][idx-extrema_width],
+                        0, 60, linestyles='dashed')
+            plt.grid(True)
+            plt.show()
 
         max_deriv = derivative_array[max_index]
         max_deriv_data = scaled_df["ahv_data", temperature][max_index]
@@ -302,7 +302,7 @@ def tauc_plotter(scaled_df, linear_region_df):
     Shows plot.
     """
     # Linear region disappears?
-    for temperature in scaled_df["ahv_data"].columns[1:5]:            # temp slice
+    for temperature in scaled_df["ahv_data"].columns:
         temperature_label = temperature.rstrip("(ahv)")
         plt.plot(scaled_df[("Energy","eV")],
                  scaled_df["ahv_data",temperature],
@@ -351,7 +351,7 @@ def main():
     # demo.show()
 
     linear_region_df = linear_region_extrapolater(scaled_df)
-    tauc_plotter(scaled_df, linear_region_df)
+    tauc_plotter(scaled_df.iloc[:, [0,2,3,4,5]], linear_region_df)
 
 if __name__ == "__main__":
     main()
