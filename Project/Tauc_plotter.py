@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+from scipy.ndimage import gaussian_filter
 from matplotlib.widgets import Slider
 
 import extractor
@@ -164,6 +165,19 @@ def smooth_n_deriv(rough_data, energy,window, porder):
     derived_data = np.gradient(smooth_data,energy)
     return derived_data
 
+def gaussian_smooth(rough_data, energy, sigma, *args):
+    """
+    Helper function to smooth data using a Gaussian filter.
+
+    Input: rough_data (Series)
+    Spec data scaled to ahv.
+    Returns: derived_data (Series)
+    Deritive of smoothed data.
+    """
+    smooth_data = gaussian_filter(rough_data,sigma, order=0)
+    derived_data = np.gradient(smooth_data,energy)
+    return derived_data
+
 def linear_region_extrapolater(scaled_df):
     """
     Calculates the band gap using Tauc-like plots from a line built
@@ -181,7 +195,7 @@ def linear_region_extrapolater(scaled_df):
     # Approximate width of derivative peak around linear region
     extrema_width = 50
     linear_region_df = pd.DataFrame()
-    for temperature in scaled_df["data_deriv"].columns[25:26]:  # temp slice
+    for temperature in scaled_df["data_deriv"].columns[1:5]:  # temp slice
         derivative_array = np.array(scaled_df["data_deriv" ,temperature])
         #print(temperature) t525 bad?
 
@@ -190,7 +204,7 @@ def linear_region_extrapolater(scaled_df):
         # many false peaks appear
         max_index = signal.argrelextrema(derivative_array,
                                          np.greater,
-                                         order=extrema_width)[0][1:-1] # testing slice
+                                         order=extrema_width)[0][-2] # testing slice
         
         # Testing
         plt.plot(scaled_df["Energy","eV"], derivative_array)
@@ -201,6 +215,7 @@ def linear_region_extrapolater(scaled_df):
                     0, 60, linestyles='dashed')
         plt.vlines(scaled_df["Energy","eV"][idx-extrema_width],
                     0, 60, linestyles='dashed')
+        plt.grid(True)
         plt.show()
 
         max_deriv = derivative_array[max_index]
@@ -220,15 +235,19 @@ class InteractivePlot:
         # Initialize data and plot
         self.window, self.p_order= FILTER_WINDOW, FILTER_ORDER
         self.demo_data = scaled_df.iloc[:, 1:]
-        self.temperature = self.demo_data.columns[0][1]
+        self.temperature = self.demo_data.columns[0][1] # Only uses 1st temp
         self.energy = scaled_df["Energy","eV"]
         self.fig, self.ax = plt.subplots()
-        plt.subplots_adjust(bottom=0.25)
+        plt.subplots_adjust(bottom=0.4)
         self.ax_slide = plt.axes([0.25, 0.1, 0.65, 0.03])
+        self.ax_slide_pord = plt.axes([0.25, 0.2, 0.65, 0.03])
         # Window size for Savgol filter should be odd
         self.win_size = Slider(
             self.ax_slide, 'Window size',
             valmin=3, valmax=99, valinit=FILTER_WINDOW, valstep=2) 
+        self.porder_size = Slider(
+            self.ax_slide_pord, 'Poly order',
+            valmin=0, valmax=9, valinit=FILTER_ORDER, valstep=1)
         self.ax.set_xlabel("Photon energy (eV)")
         self.ax.set_ylabel("Gradient")
         self.ax.grid(True)
@@ -249,9 +268,11 @@ class InteractivePlot:
                 "r-",linewidth=0.5)
 
         self.win_size.on_changed(self.update_win)
+        self.porder_size.on_changed(self.update_porder)
 
     def update_win(self,window):
         """Updates the plot with data smoothed with new window size."""
+        self.window = window
         self.demo_data["data_deriv",self.temperature] = smooth_n_deriv(
             self.demo_data["ahv_data", self.temperature],
             self.energy,
@@ -259,11 +280,22 @@ class InteractivePlot:
         self.current.set_ydata(self.demo_data["data_deriv",
                                               self.temperature])
         self.fig.canvas.draw()
+    
+    def update_porder(self,porder):
+        """Updates the plot with data smoothed with new polynomial order."""
+        self.p_order = porder
+        self.demo_data["data_deriv",self.temperature] = smooth_n_deriv(
+            self.demo_data["ahv_data", self.temperature],
+            self.energy,
+            self.window, porder)
+        self.current.set_ydata(self.demo_data["data_deriv",
+                                              self.temperature])
+        self.fig.canvas.draw()
 
     def show(self):
         plt.show()
 
-def tauc_plotter(scaled_df):#, linear_region_df):
+def tauc_plotter(scaled_df, linear_region_df):
     """Plots multiple tauc plots on one set of axes.
     Input:  dataframe with multi-index (filename and measurement)
     Returns: None
@@ -272,14 +304,17 @@ def tauc_plotter(scaled_df):#, linear_region_df):
     # Linear region disappears?
     for temperature in scaled_df["ahv_data"].columns[1:5]:            # temp slice
         temperature_label = temperature.rstrip("(ahv)")
-        plt.plot(scaled_df[("Energy","eV")], scaled_df["ahv_data",temperature],
+        plt.plot(scaled_df[("Energy","eV")],
+                 scaled_df["ahv_data",temperature],
                  label=temperature_label)
         
-        # max_deriv, linear_region_yint = linear_region_df[temperature]
-        # band_gap = -linear_region_yint/max_deriv
-        # linear_region_line = max_deriv * scaled_df[("Energy","eV")] + linear_region_yint
-        # plt.plot(scaled_df[("Energy","eV")], linear_region_line, "--",
-        #          label=f"{temperature_label} band-gap: {band_gap:.3f}")
+        max_deriv, linear_region_yint = linear_region_df["ahv_data",
+                                                         temperature]
+        band_gap = -linear_region_yint/max_deriv
+        lin_region=max_deriv*scaled_df[("Energy",
+                                        "eV")]+linear_region_yint
+        plt.plot(scaled_df[("Energy","eV")], lin_region, "--",
+                 label=f"{temperature_label} band-gap: {band_gap:.3f}")
 
     plt.xlabel("Photon energy (eV)")
     plt.xlim(0, 5.5)
@@ -287,20 +322,15 @@ def tauc_plotter(scaled_df):#, linear_region_df):
     plt.ylim(0, 80)
     plt.grid(True)
     plt.legend()
-    plt.savefig("Tauc-like plot")
+    #plt.savefig("Tauc-like plot")
     plt.show()
 
 def other_tests(data):
     """
     Creates CSVs with single columns of data to run with other tools
     """
-    wavelength = data.iloc[:, 0]
-    values = data.iloc[:, 1:]
-    new_values = values + 1 + np.sqrt(4*values**2+8*values)
-    new_data = pd.concat([wavelength, new_values], axis=1)
-    #print(new_data)
-    extractor.autoextract(new_data, 'example-output',
-                          'Ex_other_tools',intensity_scale=100,
+    extractor.autoextract(data, 'example-output',
+                          'Ex_other_tools',
                           verbose=True)
     
 
@@ -312,13 +342,16 @@ def main():
     usingdata, allbaselines = data_cleaner(lowTdata, highTdata)
     scaled_df = scale_n_differentiate(usingdata)
 
-    other_tests(usingdata[1245:3000])
+    # reenable some relevant band gap and plot stuff, 
+    # add other smoothing options, discuss regression options
+
+    #other_tests(usingdata[1245:3000])
 
     # demo = InteractivePlot(scaled_df.iloc[:, [0, 25]])
     # demo.show()
 
-    # linear_region_df = linear_region_extrapolater(scaled_df)
-    # tauc_plotter(scaled_df)#, linear_region_df)
+    linear_region_df = linear_region_extrapolater(scaled_df)
+    tauc_plotter(scaled_df, linear_region_df)
 
 if __name__ == "__main__":
     main()

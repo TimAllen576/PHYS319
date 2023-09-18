@@ -27,12 +27,13 @@ def autoextract(data, csvname, savepath, intensity_scale=10000, verbose=False):
         EG:                An (e x (m-1)) array with e band gaps per spectra if more than one band gap is observed, where (m - 1) are the number of measured spectra
     '''
     # calcualte (F*E)^2 Tauc from reflectivity
-    tauc = data.iloc[:,1:]
+    # tauc = data.iloc[:,1:]
     wl = data.iloc[:,0]
-    R = tauc / intensity_scale  # convert from 10,000 percentage points to decimal reflectivity
-    k = (1. - R) ** 2  # k=(1-R)^2
-    s = 2 * R  # s = 2*R
-    F = k / s  # absorpotion coefficient
+    # R = tauc / intensity_scale  # convert from 10,000 percentage points to decimal reflectivity
+    # k = (1. - R) ** 2  # k=(1-R)^2
+    # s = 2 * R  # s = 2*R
+    # F = k / s  # absorpotion coefficient
+    F = data.iloc[:,1:]
     ev = 1240. / wl  # calcualte eV from wavelength
     ev.name = 'eV'  # rename column
     tauc = F.mul(ev, axis=0) ** 2  # calculate tauc
