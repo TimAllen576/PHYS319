@@ -17,7 +17,6 @@ from scipy import signal
 from scipy.ndimage import gaussian_filter
 from matplotlib.widgets import Slider
 
-import extractor
 
 
 LOWTFILE = "20230906 REAL554 PHYS381 LowT.csv"
@@ -27,9 +26,9 @@ HEADER_LEN = 2   # Different header types could require redoing a lot of code
 INI_WAVELENGTH = 1000
 FINAL_WAVELENGTH = 200
 WAVELENGTH_STEP = 0.25
-GLASS_INTERFERENCE_ENERGY = 5
+GLASS_INTERFERENCE_ENERGY = 5.2
 R=1/2   # r-value denoting the direct allowed transition
-FILTER_WINDOW = 35
+FILTER_WINDOW = 31
 FILTER_ORDER = 1
 
 
@@ -195,9 +194,8 @@ def linear_region_extrapolater(scaled_df, test=False):
     # Approximate width of derivative peak around linear region
     extrema_width = 50
     linear_region_df = pd.DataFrame()
-    for temperature in scaled_df["data_deriv"].columns[1:5]:  # temp slice
+    for temperature in scaled_df["data_deriv"].columns[3:5]:  # temp slice
         derivative_array = np.array(scaled_df["data_deriv" ,temperature])
-        #print(temperature) t525 bad?
 
         # Correct index is second to last, final is at far right and 
         #since derivatives are so low at low energies
@@ -223,7 +221,7 @@ def linear_region_extrapolater(scaled_df, test=False):
         max_deriv_energy = scaled_df["Energy","eV"][max_index]
         linear_region_yint = max_deriv_data - max_deriv * max_deriv_energy
         #Important to match multi-index
-        linear_region_df["ahv_data",temperature] = [max_deriv, linear_region_yint]
+        linear_region_df["ahv_data",temperature] = max_deriv, linear_region_yint
         
     # add option for regr fit within window
     return linear_region_df
@@ -297,11 +295,13 @@ class InteractivePlot:
 
 def tauc_plotter(scaled_df, linear_region_df):
     """Plots multiple tauc plots on one set of axes.
-    Input:  dataframe with multi-index (filename and measurement)
+    Input:  scaled_df (DataFrame)
+    Dataframe with columns of energy, ahv data and data derivitives
+    linear_region_df (DataFrame)
+    Datframe with columns of max derivative and y-intercept for each temp
     Returns: None
     Shows plot.
     """
-    # Linear region disappears?
     for temperature in scaled_df["ahv_data"].columns:
         temperature_label = temperature.rstrip("(ahv)")
         plt.plot(scaled_df[("Energy","eV")],
@@ -325,15 +325,6 @@ def tauc_plotter(scaled_df, linear_region_df):
     #plt.savefig("Tauc-like plot")
     plt.show()
 
-def other_tests(data):
-    """
-    Creates CSVs with single columns of data to run with other tools
-    """
-    extractor.autoextract(data, 'example-output',
-                          'Ex_other_tools',
-                          verbose=True)
-    
-
 def main():
     """Main function to take UV-Vis spec data and create Tauc-like plots
     determining bandgap temperature dependance."""
@@ -342,16 +333,24 @@ def main():
     usingdata, allbaselines = data_cleaner(lowTdata, highTdata)
     scaled_df = scale_n_differentiate(usingdata)
 
-    # reenable some relevant band gap and plot stuff, 
-    # add other smoothing options, discuss regression options
+    # email derivs to Daniel, HW, clean up examples and code
+    # implement regression and set points
 
-    #other_tests(usingdata[1245:3000])
-
-    # demo = InteractivePlot(scaled_df.iloc[:, [0, 25]])
-    # demo.show()
-
-    linear_region_df = linear_region_extrapolater(scaled_df)
-    tauc_plotter(scaled_df.iloc[:, [0,2,3,4,5]], linear_region_df)
+    #demo = InteractivePlot(scaled_df.iloc[:, [0, 10]])
+    #demo.show()
+    
+    daniel_df = scaled_df.iloc[:, [0, 1,2,10,23]]
+    new_df = pd.DataFrame(scaled_df.iloc[:, [0]])
+    for temperature in daniel_df.columns[1:]:
+        new_df[temperature] = smooth_n_deriv(
+            daniel_df[temperature],
+            daniel_df["Energy","eV"],
+            FILTER_WINDOW, FILTER_ORDER)
+    # write new_df to a csv
+    new_df.to_csv("daniel_df.csv", index=False)
+    
+    #linear_region_df = linear_region_extrapolater(scaled_df)
+    #tauc_plotter(scaled_df.iloc[:, [0,4,5]], linear_region_df)
 
 if __name__ == "__main__":
     main()
