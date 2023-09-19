@@ -9,7 +9,6 @@ Created Sept 2023
 @author: Timothy Allen 66522411
 """
 
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,17 +16,14 @@ from scipy import signal
 from scipy.ndimage import gaussian_filter
 from matplotlib.widgets import Slider
 
-
-
-LOWTFILE = "20230906 REAL554 PHYS381 LowT.csv"
-HIGHTFILE = "20230912 REAL554 PHYS381 HighT.csv"
-HEADER_LEN = 2   # Different header types could require redoing a lot of code
-#NUM_MEASURES = 3201 # Comment for preferred way of giving number of values
+LOW_T_FILE = "20230906 REAL554 PHYS381 LowT.csv"
+HIGH_T_FILE = "20230912 REAL554 PHYS381 HighT.csv"
 INI_WAVELENGTH = 1000
 FINAL_WAVELENGTH = 200
 WAVELENGTH_STEP = 0.25
 GLASS_INTERFERENCE_ENERGY = 5.2
-R=1/2   # r-value denoting the direct allowed transition
+SAMPLE_THICKNESS = 44 * 10 ** - 7  # Units of cm
+R = 1 / 2  # r-value denoting the direct allowed transition
 FILTER_WINDOW = 31
 FILTER_ORDER = 1
 
@@ -42,28 +38,22 @@ def get_data(filename):
     Returns: formatted_data (DataFrame)
     Dataframe with columns of wavelengths, baselines and abs data.
     """
-    # Hacky, user prompts or automatic depending on performance requirements
-    if 'NUM_MEASURES' in globals():
-        rows = NUM_MEASURES  # type: ignore
-    else:
-        rows = (INI_WAVELENGTH-FINAL_WAVELENGTH)/WAVELENGTH_STEP+1  # type: ignore
-
-    raw_data = pd.read_csv(
-        filename, header=[0,HEADER_LEN-1], nrows=rows)
-
-    # Assume all samples are over same wavelengths so first column is taken
-    wavelengths = raw_data.loc[:, (slice(None),
-                                   "Wavelength (nm)")].iloc[:,0]
-    wavelengthsdf = pd.DataFrame(wavelengths.values,
-                                columns=["Wavelength (nm)"])
-
+    rows = int((INI_WAVELENGTH - FINAL_WAVELENGTH) / WAVELENGTH_STEP + 1)
+    raw_data = pd.read_csv(filename, header=[0, 1], nrows=rows)
+    # Assume all samples are over same wavelengths
+    wavelengths_column = raw_data.loc[:, (slice(None),
+                                          "Wavelength (nm)")].iloc[:, 0]
+    wavelengths = pd.DataFrame(wavelengths_column.values,
+                               columns=["Wavelength (nm)"])
     # Creates new DataFrame, does not preserve relative order of
-    # %T and Abs measurements, could use a loop or be sorted if necessary
-    measurements = raw_data.loc[:, (slice(None), ["%T","Abs"])]
-    new_cols = index_aligner(raw_data)
-    measurementsdf = pd.DataFrame(measurements.values, columns=new_cols)
-    formatted_data = wavelengthsdf.join(measurementsdf)
+    # %T and Abs measurements, could use a loop / be sorted if necessary
+    measurements_column = raw_data.loc[:, (slice(None), ["%T", "Abs"])]
+    aligned_columns = index_aligner(raw_data)
+    measurements = pd.DataFrame(measurements_column.values,
+                                columns=aligned_columns)
+    formatted_data = wavelengths.join(measurements)
     return formatted_data
+
 
 def index_aligner(raw_data):
     """
@@ -83,44 +73,52 @@ def index_aligner(raw_data):
         new_top_labels, raw_data.columns.get_level_values(1)])
     new_cols = []
     for old_cols_tuple in shifted_cols[1::2]:
-        new_cols.append(old_cols_tuple[0] + " ("+ old_cols_tuple[1]+")")
+        new_cols.append(old_cols_tuple[0] + " (" + old_cols_tuple[1] + ")")
     return new_cols
 
-def data_cleaner(lowTdata, highTdata):
+
+def data_cleaner(low_t_data, high_t_data):
     """
     Specialised function which removes known bad data points and
-    seperates baseline data.
+    separates baseline data.
 
     Input: lowTdata (dataframe), highTdata (dataframe)
-    Specific low and high temp data with wavelengths, baselines and abs data.
-    Returns: allTdata (Dataframe)
+    Specific low and high temp data with wavelengths, baselines and Abs.
+    Returns: all_t_data (Dataframe)
     Combined abs data with data after detector malfunction removed.
-    allbaselines (Dataframe)
+    all_baselines (Dataframe)
     Combined baseline data.
     """
-    lowTbaseline = lowTdata.iloc[:,1:3]
-    highTbaseline = highTdata.iloc[:,1:3]
-    allbaselines = pd.concat([lowTbaseline, highTbaseline], axis=1)
-
-    # Slices tests, baselines and data where the detector broke from heat?
-    sliced_highTdata = highTdata.iloc[:,3:-1]
-
-    malfunction_mask = np.zeros(sliced_highTdata.shape, dtype=bool)
+    low_t_baseline = low_t_data.iloc[:, 1:3]
+    high_t_baseline = high_t_data.iloc[:, 1:3]
+    all_baselines = pd.concat([low_t_baseline, high_t_baseline], axis=1)
+    # Slice test and mask data where the detector broke from heat?
+    sliced_high_t_data = high_t_data.iloc[:, 3:-1]
+    malfunction_mask = np.zeros(sliced_high_t_data.shape, dtype=bool)
     malfunction_mask[:801, -10:] = True
-    clean_highTdata=sliced_highTdata.mask(malfunction_mask,other=np.nan)
+    masked_high_t_data = sliced_high_t_data.mask(malfunction_mask,
+                                                 other=np.nan)
     # Janky little line to stop errors from duplicate columns labels
-    clean_highTdata.rename(columns={"T325 (Abs)":"T325NoVac (Abs)"}, inplace=True)
-    allTdata = pd.concat(
-        [lowTdata["Wavelength (nm)"],lowTdata.iloc[:,3:],
-        clean_highTdata], axis=1)
-    return allTdata, allbaselines
+    masked_high_t_data.rename(columns={"T325 (Abs)": "T325NoVac (Abs)"},
+                              inplace=True)
+    all_t_data = pd.concat([low_t_data["Wavelength (nm)"],
+                            low_t_data.iloc[:, 3:],
+                            masked_high_t_data], axis=1)
+    # Cut off data where glass interferes
+    glass_interference_wavelength = 1240 / GLASS_INTERFERENCE_ENERGY
+    glass_int_index = (
+            all_t_data["Wavelength (nm)"] <
+            glass_interference_wavelength).idxmax()
+    clean_data = all_t_data[:glass_int_index]
+    return clean_data, all_baselines
 
-def scale_n_differentiate(datadf):                                  # refactor?
+
+def scale_n_differentiate(data):
     """
     Calculates optical band gaps for spectroscopic data using a
     Tauc-like method.
 
-    Input : datadf (DataFrame)
+    Input : data (DataFrame)
     Clean data to be used for analysis with first column as wavelengths
     and other columns as sample data.
     Returns : sorted_scaled_df (DataFrame)
@@ -128,42 +126,37 @@ def scale_n_differentiate(datadf):                                  # refactor?
     absorbance scaled to ahv^2,
     derivative after data smoothing.
     """
-    # Create new dataframe with photon energy
-    energy_df = pd.DataFrame({"eV":1240 / datadf["Wavelength (nm)"]})
+    energy_df = pd.DataFrame({"eV": 1240 / data["Wavelength (nm)"]})
     scaled_df = pd.concat({"Energy": energy_df}, axis=1)
-    # Find index to cut off data where glass interferes
-    glass_int_index = (
-        scaled_df["Energy","eV"] >
-        GLASS_INTERFERENCE_ENERGY).idxmax()
-    scaled_df = scaled_df[:glass_int_index]
-    for temperature_Abs in datadf.columns[1:]:
-        temperature_ahv = temperature_Abs.replace("Abs", "ahv")
-        # Make absorbance scaling calculations
-        scaled_df["ahv_data",temperature_ahv]=((
-            datadf[temperature_Abs] * scaled_df["Energy", "eV"]) ** (1/R))[
-            :glass_int_index]
-        # Smooth data and find its derivative using preferred filter #Pull out?
-        scaled_df["data_deriv",temperature_ahv] = smooth_n_deriv(
-            scaled_df["ahv_data", temperature_ahv],
-            scaled_df["Energy","eV"],
+    abs_factor = 1 / (np.log(np.e) * SAMPLE_THICKNESS)
+    for sample_abs in data.columns[1:]:
+        sample_ahv = sample_abs.replace("Abs", "ahv")
+        scaled_df["ahv_data", sample_ahv] = (
+                (abs_factor * data[sample_abs] *
+                 scaled_df["Energy", "eV"]) ** (1 / R))
+        scaled_df["data_derivative", sample_ahv] = smooth_n_derivative(
+            scaled_df["ahv_data", sample_ahv],
+            scaled_df["Energy", "eV"],
             FILTER_WINDOW, FILTER_ORDER)
     sorted_scaled_df = scaled_df.sort_index(axis=1, level=0)
-    #smoothing-various opts,
     return sorted_scaled_df
 
-def smooth_n_deriv(rough_data, energy,window, porder):
+
+def smooth_n_derivative(rough_data, energy, window, porder):
     """
     Helper function to smooth data using a Savitzky-Golay filter.
 
     Input: rough_data (Series)
     Spec data scaled to ahv.
     Returns: derived_data (Series)
-    Deritive of smoothed data.
+    Derivative of smoothed data.
     """
-    smooth_data = signal.savgol_filter(rough_data,window, porder)
-    derived_data = np.gradient(smooth_data,energy)
+    smooth_data = signal.savgol_filter(rough_data, window, porder)
+    derived_data = np.gradient(smooth_data, energy)
     return derived_data
 
+
+# noinspection PyUnusedLocal
 def gaussian_smooth(rough_data, energy, sigma, *args):
     """
     Helper function to smooth data using a Gaussian filter.
@@ -171,149 +164,155 @@ def gaussian_smooth(rough_data, energy, sigma, *args):
     Input: rough_data (Series)
     Spec data scaled to ahv.
     Returns: derived_data (Series)
-    Deritive of smoothed data.
+    Derivative of smoothed data.
     """
-    smooth_data = gaussian_filter(rough_data,sigma, order=0)
-    derived_data = np.gradient(smooth_data,energy)
+    smooth_data = gaussian_filter(rough_data, sigma, order=0)
+    derived_data = np.gradient(smooth_data, energy)
     return derived_data
+
 
 def linear_region_extrapolater(scaled_df, test=False):
     """
     Calculates the band gap using Tauc-like plots from a line built
     from the max derivative. order should be around the width of the
-    derivitive 'bump'.
+    derivative 'bump'.
 
     Input : scaled_df (DataFrame)
-    Dataframe with columns of energy, ahv data and data derivitives
+    Dataframe with columns of energy, ahv data and data derivatives
     for each temperature.
     Returns : linear_region_df (DataFrame)
-    Dataframe of gradient and y-intercep of lines extrapolated from the
+    Dataframe of gradient and y-intercept of lines extrapolated from the
     linear region of the data, energy value at x-intercept is
     the optical band gap.
     """
     # Approximate width of derivative peak around linear region
     extrema_width = 50
     linear_region_df = pd.DataFrame()
-    for temperature in scaled_df["data_deriv"].columns[3:5]:  # temp slice
-        derivative_array = np.array(scaled_df["data_deriv" ,temperature])
+    for temperature in scaled_df["data_derivative"].columns[3:5]:  # temp slice
+        derivative_array = np.array(scaled_df["data_derivative", temperature])
 
         # Correct index is second to last, final is at far right and 
-        #since derivatives are so low at low energies
+        # since derivatives are so low at low energies
         # many false peaks appear
         max_index = signal.argrelextrema(derivative_array,
                                          np.greater,
-                                         order=extrema_width)[0][-2] # testing slice
-        
+                                         order=extrema_width)[0][
+            -2]  # testing slice
+
         if test:
-            plt.plot(scaled_df["Energy","eV"], derivative_array)
-            idx=max_index
-            plt.vlines(scaled_df["Energy","eV"][idx],
-                        0, 60)
-            plt.vlines(scaled_df["Energy","eV"][idx+extrema_width],
-                        0, 60, linestyles='dashed')
-            plt.vlines(scaled_df["Energy","eV"][idx-extrema_width],
-                        0, 60, linestyles='dashed')
+            plt.plot(scaled_df["Energy", "eV"], derivative_array)
+            idx = max_index
+            plt.vlines(scaled_df["Energy", "eV"][idx],
+                       0, 60)
+            plt.vlines(scaled_df["Energy", "eV"][idx + extrema_width],
+                       0, 60, linestyles='dashed')
+            plt.vlines(scaled_df["Energy", "eV"][idx - extrema_width],
+                       0, 60, linestyles='dashed')
             plt.grid(True)
             plt.show()
 
-        max_deriv = derivative_array[max_index]
-        max_deriv_data = scaled_df["ahv_data", temperature][max_index]
-        max_deriv_energy = scaled_df["Energy","eV"][max_index]
-        linear_region_yint = max_deriv_data - max_deriv * max_deriv_energy
-        #Important to match multi-index
-        linear_region_df["ahv_data",temperature] = max_deriv, linear_region_yint
-        
-    # add option for regr fit within window
+        max_derivative = derivative_array[max_index]
+        max_derivative_data = scaled_df["ahv_data", temperature][max_index]
+        max_derivative_energy = scaled_df["Energy", "eV"][max_index]
+        linear_region_y_int = max_derivative_data - max_derivative * max_derivative_energy
+        # Important to match multi-index
+        linear_region_df[
+            "ahv_data", temperature] = max_derivative, linear_region_y_int
+
+    # add option for regression fit within window
     return linear_region_df
+
 
 class InteractivePlot:
     """Interactively shows different smoothing options to show Daniel."""
 
     def __init__(self, scaled_df):
         # Initialize data and plot
-        self.window, self.p_order= FILTER_WINDOW, FILTER_ORDER
+        self.window, self.p_order = FILTER_WINDOW, FILTER_ORDER
         self.demo_data = scaled_df.iloc[:, 1:]
-        self.temperature = self.demo_data.columns[0][1] # Only uses 1st temp
-        self.energy = scaled_df["Energy","eV"]
+        self.temperature = self.demo_data.columns[0][1]  # Only uses 1st temp
+        self.energy = scaled_df["Energy", "eV"]
         self.fig, self.ax = plt.subplots()
         plt.subplots_adjust(bottom=0.4)
         self.ax_slide = plt.axes([0.25, 0.1, 0.65, 0.03])
-        self.ax_slide_pord = plt.axes([0.25, 0.2, 0.65, 0.03])
-        # Window size for Savgol filter should be odd
+        self.ax_slide_p_ord = plt.axes([0.25, 0.2, 0.65, 0.03])
+        # Window size for Sav-gol filter should be odd
         self.win_size = Slider(
             self.ax_slide, 'Window size',
-            valmin=3, valmax=99, valinit=FILTER_WINDOW, valstep=2) 
+            valmin=3, valmax=99, valinit=FILTER_WINDOW, valstep=2)
         self.porder_size = Slider(
-            self.ax_slide_pord, 'Poly order',
+            self.ax_slide_p_ord, 'Poly order',
             valmin=0, valmax=9, valinit=FILTER_ORDER, valstep=1)
         self.ax.set_xlabel("Photon energy (eV)")
         self.ax.set_ylabel("Gradient")
         self.ax.grid(True)
 
         # Initial calculations
-        self.demo_data["data_deriv_raw",
-                       self.temperature] = np.gradient(
+        self.demo_data["data_derivative_raw", self.temperature] = np.gradient(
             self.demo_data["ahv_data", self.temperature],
             self.energy)
-        # self.raw =self.ax.plot(self.energy,
-        #         self.demo_data["data_deriv_raw",self.temperature],
-        #         "b.",markersize=1, alpha = 0.5)
-        self.demo_data["data_deriv",self.temperature] = smooth_n_deriv(
+        self.raw = self.ax.plot(self.energy,
+                                self.demo_data["data_derivative_raw",
+                                               self.temperature],
+                                "b.", markersize=1, alpha=0.5)
+        self.demo_data[
+            "data_derivative", self.temperature] = smooth_n_derivative(
             self.demo_data["ahv_data", self.temperature],
             self.energy, FILTER_WINDOW, FILTER_ORDER)
-        self.current,=self.ax.plot(self.energy,
-                self.demo_data["data_deriv", self.temperature],
-                "r-",linewidth=0.5)
-
+        self.current, = self.ax.plot(self.energy,
+                                     self.demo_data[
+                                         "data_derivative", self.temperature],
+                                     "r-", linewidth=0.5)
         self.win_size.on_changed(self.update_win)
         self.porder_size.on_changed(self.update_porder)
+        plt.show()
 
-    def update_win(self,window):
+    def update_win(self, window):
         """Updates the plot with data smoothed with new window size."""
         self.window = window
-        self.demo_data["data_deriv",self.temperature] = smooth_n_deriv(
+        self.demo_data[
+            "data_derivative", self.temperature] = smooth_n_derivative(
             self.demo_data["ahv_data", self.temperature],
             self.energy,
             window, self.p_order)
-        self.current.set_ydata(self.demo_data["data_deriv",
-                                              self.temperature])
+        self.current.set_ydata(
+            self.demo_data["data_derivative", self.temperature])
         self.fig.canvas.draw()
-    
-    def update_porder(self,porder):
+
+    def update_porder(self, porder):
         """Updates the plot with data smoothed with new polynomial order."""
         self.p_order = porder
-        self.demo_data["data_deriv",self.temperature] = smooth_n_deriv(
+        self.demo_data[
+            "data_derivative", self.temperature] = smooth_n_derivative(
             self.demo_data["ahv_data", self.temperature],
             self.energy,
             self.window, porder)
-        self.current.set_ydata(self.demo_data["data_deriv",
-                                              self.temperature])
+        self.current.set_ydata(
+            self.demo_data["data_derivative", self.temperature])
         self.fig.canvas.draw()
 
-    def show(self):
-        plt.show()
 
 def tauc_plotter(scaled_df, linear_region_df):
     """Plots multiple tauc plots on one set of axes.
     Input:  scaled_df (DataFrame)
-    Dataframe with columns of energy, ahv data and data derivitives
+    Dataframe with columns of energy, ahv data and data derivatives
     linear_region_df (DataFrame)
-    Datframe with columns of max derivative and y-intercept for each temp
+    DataFrame with columns of max derivative and y-intercept for each temp
     Returns: None
     Shows plot.
     """
     for temperature in scaled_df["ahv_data"].columns:
         temperature_label = temperature.rstrip("(ahv)")
-        plt.plot(scaled_df[("Energy","eV")],
-                 scaled_df["ahv_data",temperature],
+        plt.plot(scaled_df[("Energy", "eV")],
+                 scaled_df["ahv_data", temperature],
                  label=temperature_label)
-        
-        max_deriv, linear_region_yint = linear_region_df["ahv_data",
-                                                         temperature]
-        band_gap = -linear_region_yint/max_deriv
-        lin_region=max_deriv*scaled_df[("Energy",
-                                        "eV")]+linear_region_yint
-        plt.plot(scaled_df[("Energy","eV")], lin_region, "--",
+
+        max_derivative, linear_region_y_int = linear_region_df[
+            "ahv_data", temperature]
+        band_gap = -linear_region_y_int / max_derivative
+        lin_region = max_derivative * scaled_df[
+            ("Energy", "eV")] + linear_region_y_int
+        plt.plot(scaled_df[("Energy", "eV")], lin_region, "--",
                  label=f"{temperature_label} band-gap: {band_gap:.3f}")
 
     plt.xlabel("Photon energy (eV)")
@@ -322,35 +321,28 @@ def tauc_plotter(scaled_df, linear_region_df):
     plt.ylim(0, 80)
     plt.grid(True)
     plt.legend()
-    #plt.savefig("Tauc-like plot")
+    # plt.savefig("Tauc-like plot")
     plt.show()
+
 
 def main():
     """Main function to take UV-Vis spec data and create Tauc-like plots
-    determining bandgap temperature dependance."""
-    lowTdata = get_data(LOWTFILE)
-    highTdata = get_data(HIGHTFILE)
-    usingdata, allbaselines = data_cleaner(lowTdata, highTdata)
-    scaled_df = scale_n_differentiate(usingdata)
+    determining band-gap temperature dependence."""
+    low_t_data = get_data(LOW_T_FILE)
+    high_t_data = get_data(HIGH_T_FILE)
+    clean_data, all_baselines = data_cleaner(low_t_data, high_t_data)
+    scaled_df = scale_n_differentiate(clean_data)
 
-    # email derivs to Daniel, HW, clean up examples and code
-    # implement regression and set points
+    # TODO: HW, clean up examples and code,
+    #  implement regression and set points,
+    #  finalize smoothing and give good examples
 
-    #demo = InteractivePlot(scaled_df.iloc[:, [0, 10]])
-    #demo.show()
-    
-    daniel_df = scaled_df.iloc[:, [0, 1,2,10,23]]
-    new_df = pd.DataFrame(scaled_df.iloc[:, [0]])
-    for temperature in daniel_df.columns[1:]:
-        new_df[temperature] = smooth_n_deriv(
-            daniel_df[temperature],
-            daniel_df["Energy","eV"],
-            FILTER_WINDOW, FILTER_ORDER)
-    # write new_df to a csv
-    new_df.to_csv("daniel_df.csv", index=False)
-    
-    #linear_region_df = linear_region_extrapolater(scaled_df)
-    #tauc_plotter(scaled_df.iloc[:, [0,4,5]], linear_region_df)
+    InteractivePlot(scaled_df.iloc[:, [0, 10]])
+    plt.show()
+
+    # linear_region_df = linear_region_extrapolater(scaled_df)
+    # tauc_plotter(scaled_df.iloc[:, [0,4,5]], linear_region_df)
+
 
 if __name__ == "__main__":
     main()
