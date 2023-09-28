@@ -180,8 +180,11 @@ def linear_region_extrapolater(scaled_df, average_ahv2):
         max_slope = derivative_array[max_index]
         max_slope_energy = scaled_df["Energy", "eV"][max_index]
         linear_y_int = max_slope_data - max_slope * max_slope_energy
+        band_gap = -linear_y_int / max_slope
         # Important to match multi-index
-        linear_region_df["ahv_data", temperature] = max_slope, linear_y_int
+        linear_region_df["ahv_data", temperature] = (max_slope,
+                                                     linear_y_int,
+                                                     band_gap)
     return linear_region_df
 
 
@@ -244,13 +247,12 @@ def tauc_plotter(scaled_df, linear_region_df):
         ax.plot(scaled_df[("Energy", "eV")],
                 scaled_df["ahv_data", temperature],
                 label=temperature_label)
-        # max_derivative, linear_region_y_int = linear_region_df[
-        #     "ahv_data", temperature]
-        # band_gap = -linear_region_y_int / max_derivative
-        # lin_region = max_derivative * scaled_df[
-        #     ("Energy", "eV")] + linear_region_y_int
-        # ax.plot(scaled_df[("Energy", "eV")], lin_region, "--",
-        #          label=f"{temperature_label} band-gap: {band_gap:.3f}")
+        max_derivative, linear_region_y_int, band_gap = linear_region_df[
+            "ahv_data", temperature]
+        lin_region = max_derivative * scaled_df[
+            ("Energy", "eV")] + linear_region_y_int
+        ax.plot(scaled_df[("Energy", "eV")], lin_region, "--",
+                label=f"{temperature_label} band-gap: {band_gap:.3f}")
     ax.set_xlim(2.5, 4)
     ax.set_ylim(0, 1.5 * 10 ** 12)
     ax.set_xlabel("Photon energy (eV)")
@@ -340,15 +342,21 @@ def main():
     clean_data, all_baselines = data_cleaner(low_t_data, high_t_data)
     scaled_df = scale_n_differentiate(clean_data)
 
-    # TODO: HW, implement regression window
+    # TODO: HW, implement regression window, check temps
 
-    # InteractivePlot(scaled_df.iloc[:, [0, 15]])
+    # InteractivePlot(scaled_df.iloc[:, [0, 30]])
     # plt.show()
 
     average_ahv2 = ahv2extractor(scaled_df)
     linear_region_df = linear_region_extrapolater(scaled_df, average_ahv2)
-    tauc_plotter(scaled_df.iloc[:, [0, 1, 2, 10, 20, 30, 33]],
+    tauc_plotter(scaled_df.iloc[:, [0, 1, 10, 20, 33]],
                  linear_region_df)
+    # band_gap = linear_region_df.iloc[2]
+    # temps = [15, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275,
+    #          300, 325, 303, 325, 350, 375, 400, 425, 450, 475, 500, 525, 525,
+    #          550, 575, 600, 625, 650, 675, 700, 725]
+    # plt.plot(temps, band_gap, "-o")
+    # plt.show()
 
 
 if __name__ == "__main__":
