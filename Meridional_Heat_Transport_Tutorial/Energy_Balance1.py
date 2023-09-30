@@ -37,7 +37,7 @@ def inferred_heat_transport(energy_in, lat_deg):
     return heat_transport
 
 
-def data_slicer(time_slice):
+def data_slicer(time_slice, is_lon_average=True):
     """
     This function reads in the CERES data and slices it to the required times
     """
@@ -46,7 +46,10 @@ def data_slicer(time_slice):
     nc_id_2 = nc_id_1.sel(time=time_slice)
     # Calculate the mean over all times and
     # longitudes to obtain a mean at every latitude
-    ceres = nc_id_2.mean('time').mean('lon')
+    if is_lon_average:
+        ceres = nc_id_2.mean('time').mean('lon')
+    else:
+        ceres = nc_id_2.mean('time')
     return ceres
 
 
@@ -77,6 +80,33 @@ def zonal_mean_plotter(ceres, filename):
     plt.savefig(filename, dpi=600)
 
 
+def global_map_plotter(ceres_global):
+    """
+    This function plots the global map of the energy balance.
+    """
+    plt.figure(figsize=(210.0 / 25.4, 120.0 / 25.4))
+    ax1 = plt.subplot(2, 2, 1)
+    ax1.imshow(ceres_global['solar_mon'] - ceres_global['toa_sw_all_mon'],
+               extent=[-180.0, 180.0, -90.0, 90.0], origin='lower')
+    ax1.set_xlabel('Longitude (degrees)')
+    ax1.set_ylabel('Latitude (degrees)')
+    tick_locations = [-180, -120, -60, 0, 60, 120, 180]
+    tick_labels = [0, 60, 120, r"$\pm$ 180", -120, -60, 0]
+    ax1.set_xticks(tick_locations, labels=tick_labels)
+    ax2 = plt.subplot(2, 2, 2, sharex=ax1, sharey=ax1)
+    ax3 = plt.subplot(2, 2, 3, sharex=ax1, sharey=ax1)
+    ax2.imshow(ceres_global['toa_lw_all_mon'],
+               extent=[-180.0, 180.0, -90.0, 90.0], origin='lower')
+    im3 = ax3.imshow(ceres_global['toa_net_all_mon'],
+                     extent=[-180.0, 180.0, -90.0, 90.0], origin='lower')
+    ax1.set_title('Absorbed Shortwave')
+    ax2.set_title('Outgoing Long-wave')
+    ax3.set_title('Net Flux')
+    cbar = ax3.figure.colorbar(im3)
+    cbar.ax.set_ylabel('Energy Flux (W m$^{-2}$)', rotation=90, va="top")
+    plt.savefig("Global_map.png", dpi=600)
+
+
 def meridional_heat_transport_plotter(ceres, meridional_heat, filename):
     """
     This function plots the meridional heat transport
@@ -94,27 +124,29 @@ def main():
     """
     Main function
     """
-    ceres = data_slicer(slice(None, None))
-    ceres_original = data_slicer(slice("2000-12-31", "2001-12-31"))
-    ceres_aus_summer = data_slicer(slice("2000-12-01", "2001-02-28"))
-    ceres_aus_winter = data_slicer(slice("2001-06-01", "2001-08-31"))
-    zonal_mean_plotter(ceres_original, "Energy_Balance1_figure1.png")
-    zonal_mean_plotter(ceres_aus_summer, "Energy_Balance1_aus_Summer.png")
-    zonal_mean_plotter(ceres_aus_winter, "Energy_Balance1_aus_Winter.png")
-    meridional_heat_all = inferred_heat_transport(
-        ceres_original['toa_net_all_mon'], ceres['lat'])
-    meridional_heat_summer = inferred_heat_transport(
-        ceres_aus_summer['toa_net_all_mon'], ceres['lat'])
-    meridional_heat_winter = inferred_heat_transport(
-        ceres_aus_winter['toa_net_all_mon'], ceres['lat'])
-    meridional_heat_transport_plotter(
-        ceres, meridional_heat_all, "Meridional_heat_transport.png")
-    meridional_heat_transport_plotter(
-        ceres_aus_summer, meridional_heat_summer,
-        "Heat_transport_summer.png")
-    meridional_heat_transport_plotter(
-        ceres_aus_winter, meridional_heat_winter,
-        "Heat_transport_winter.png")
+    # ceres = data_slicer(slice(None, None))
+    # ceres_original = data_slicer(slice("2000-12-31", "2001-12-31"))
+    # ceres_aus_summer = data_slicer(slice("2000-12-01", "2001-02-28"))
+    # ceres_aus_winter = data_slicer(slice("2001-06-01", "2001-08-31"))
+    # zonal_mean_plotter(ceres_original, "Energy_Balance1_figure1.png")
+    # zonal_mean_plotter(ceres_aus_summer, "Energy_Balance1_aus_Summer.png")
+    # zonal_mean_plotter(ceres_aus_winter, "Energy_Balance1_aus_Winter.png")
+    # meridional_heat_all = inferred_heat_transport(
+    #     ceres_original['toa_net_all_mon'], ceres['lat'])
+    # meridional_heat_summer = inferred_heat_transport(
+    #     ceres_aus_summer['toa_net_all_mon'], ceres['lat'])
+    # meridional_heat_winter = inferred_heat_transport(
+    #     ceres_aus_winter['toa_net_all_mon'], ceres['lat'])
+    # meridional_heat_transport_plotter(
+    #     ceres, meridional_heat_all, "Meridional_heat_transport.png")
+    # meridional_heat_transport_plotter(
+    #     ceres_aus_summer, meridional_heat_summer,
+    #     "Heat_transport_summer.png")
+    # meridional_heat_transport_plotter(
+    #     ceres_aus_winter, meridional_heat_winter,
+    #     "Heat_transport_winter.png")
+    ceres_global = data_slicer(slice(None, None), is_lon_average=False)
+    global_map_plotter(ceres_global)
     plt.show()
 
 
