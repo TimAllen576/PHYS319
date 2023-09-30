@@ -5,6 +5,8 @@ Reads spectroscopy data for varying temps and wavelengths and uses a
 Tauc-like plot method to determine energy of optical band-gap changes
 due to temperature.
 
+To customise the code check all points marked with # -------------------
+
 Created Sept 2023
 @author: Timothy Allen 66522411
 """
@@ -13,18 +15,26 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+from scipy.stats import linregress
 from matplotlib.widgets import Slider
 
-LOW_T_FILE = "20230906 REAL554 PHYS381 LowT.csv"
+
+NM_TO_EV = 1240
+LOW_T_FILE = "20230906 REAL554 PHYS381 LowT.csv"    # ------------------
 HIGH_T_FILE = "20230912 REAL554 PHYS381 HighT.csv"
 INI_WAVELENGTH = 1000
 FINAL_WAVELENGTH = 200
 WAVELENGTH_STEP = 0.25
 GLASS_INTERFERENCE_ENERGY = 5.2
 SAMPLE_THICKNESS = 44 * 10 ** - 7  # Units of cm
-R = 1 / 2  # r-value denoting the direct allowed transition
+R = 1 / 2  # r-value denoting the transition (1/2 is direct allowed)
 FILTER_WINDOW = 99
 FILTER_ORDER = 7
+PLOT_X_LIMS = (2.5, 4)
+PLOT_Y_LIMS = 0, 1.5 * 10 ** 12
+DERIVATIVE_BUMP_WIDTH = 75
+DERIVATIVE_LINEARITY_REQUIREMENT = 3 * 10 ** 11
+REGRESSION_WINDOW_WIDTH = 30
 
 
 def get_data(filename):
@@ -54,7 +64,7 @@ def get_data(filename):
     return formatted_data
 
 
-def index_aligner(raw_data):
+def index_aligner(raw_data):        # ----------------------------------
     """
     Specialised helper function for reindexing particular dataframes.
     Shifts the index so filenames align with unit then merges the
@@ -76,7 +86,7 @@ def index_aligner(raw_data):
     return new_cols
 
 
-def data_cleaner(low_t_data, high_t_data):
+def data_cleaner(low_t_data, high_t_data):      # ----------------------
     """
     Specialised function which removes known bad data points and
     separates baseline data.
@@ -104,7 +114,7 @@ def data_cleaner(low_t_data, high_t_data):
                             low_t_data.iloc[:, 3:],
                             masked_high_t_data], axis=1)
     # Cut off data where glass interferes
-    glass_interference_wavelength = 1240 / GLASS_INTERFERENCE_ENERGY
+    glass_interference_wavelength = NM_TO_EV / GLASS_INTERFERENCE_ENERGY
     glass_int_index = (
             all_t_data["Wavelength (nm)"] <
             glass_interference_wavelength).idxmax()
@@ -125,7 +135,7 @@ def scale_n_differentiate(data):
     absorbance scaled to ahv^2,
     derivative after data smoothing.
     """
-    energy_df = pd.DataFrame({"eV": 1240 / data["Wavelength (nm)"]})
+    energy_df = pd.DataFrame({"eV": NM_TO_EV / data["Wavelength (nm)"]})
     scaled_df = pd.concat({"Energy": energy_df}, axis=1)
     abs_factor = 1 / (np.log(np.e) * SAMPLE_THICKNESS)
     for sample_abs in data.columns[1:]:
@@ -159,6 +169,7 @@ def linear_region_extrapolater(scaled_df, average_ahv2):
     """
     Calculates the band gap using Tauc-like plots from a line built
     from the max derivative.
+    -> change to regression window
 
     Input : scaled_df (DataFrame)
     Dataframe with columns of energy, ahv data and data derivatives
@@ -172,14 +183,16 @@ def linear_region_extrapolater(scaled_df, average_ahv2):
     """
     linear_region_df = pd.DataFrame()
     for temperature in scaled_df["data_derivative"].columns:
-        derivative_array = np.array(scaled_df["data_derivative", temperature])
         # Find index of ahv_data value closest to average ahv^2
         max_index = (np.abs(scaled_df["ahv_data", temperature] -
                             average_ahv2)).idxmin()
-        max_slope_data = scaled_df["ahv_data", temperature][max_index]
-        max_slope = derivative_array[max_index]
-        max_slope_energy = scaled_df["Energy", "eV"][max_index]
-        linear_y_int = max_slope_data - max_slope * max_slope_energy
+        regression_slice = slice(max_index-REGRESSION_WINDOW_WIDTH,
+                                 max_index+REGRESSION_WINDOW_WIDTH)
+        ahv_regression = scaled_df["ahv_data", temperature][regression_slice]
+        energy_regression = scaled_df["Energy", "eV"][regression_slice]
+        regression_line = linregress(energy_regression, ahv_regression)
+        max_slope = regression_line[0]
+        linear_y_int = regression_line[1]
         band_gap = -linear_y_int / max_slope
         # Important to match multi-index
         linear_region_df["ahv_data", temperature] = (max_slope,
@@ -200,19 +213,18 @@ def ahv2extractor(scaled_df):
     Average ahv^2 value for low temperatures.
     """
     # Approximate width of derivative peak around linear region
-    bump_width = 75
-    linearity_requirement = 3 * 10 ** 11
-    last_bump_height = linearity_requirement
+    last_bump_height = DERIVATIVE_LINEARITY_REQUIREMENT
     temperature_index = 1
     ahv2list = []
     while (
-            last_bump_height >= linearity_requirement) and (
+            last_bump_height >= DERIVATIVE_LINEARITY_REQUIREMENT) and (
             temperature_index < len(scaled_df["data_derivative"].columns)):
         temperature = scaled_df["data_derivative"].columns[temperature_index]
         derivative_array = np.array(scaled_df["data_derivative", temperature])
         # Correct index may be specific to the data
-        max_index = signal.argrelextrema(derivative_array, np.greater,
-                                         order=bump_width)[0][-1]
+        max_index = signal.argrelextrema(derivative_array,
+                                         np.greater,
+                                         order=DERIVATIVE_BUMP_WIDTH)[0][-1]
         # # Visually determining bump width
         # plt.plot(scaled_df["Energy", "eV"], derivative_array)
         # plt.vlines(scaled_df["Energy", "eV"][max_index],
@@ -225,7 +237,7 @@ def ahv2extractor(scaled_df):
         # plt.show()
         last_bump_height = (
                 derivative_array[max_index] -
-                derivative_array[max_index + bump_width])
+                derivative_array[max_index + DERIVATIVE_BUMP_WIDTH])
         ahv2list.append(scaled_df["ahv_data", temperature][max_index])
         temperature_index += 1
     average_ahv2 = np.mean(ahv2list)
@@ -253,10 +265,10 @@ def tauc_plotter(scaled_df, linear_region_df):
             ("Energy", "eV")] + linear_region_y_int
         ax.plot(scaled_df[("Energy", "eV")], lin_region, "--",
                 label=f"{temperature_label} band-gap: {band_gap:.3f}")
-    ax.set_xlim(2.5, 4)
-    ax.set_ylim(0, 1.5 * 10 ** 12)
+    ax.set_xlim(PLOT_X_LIMS)
+    ax.set_ylim(PLOT_Y_LIMS)
     ax.set_xlabel("Photon energy (eV)")
-    ax.set_ylabel(r"$(\alpha h v)^{1/r}$")
+    ax.set_ylabel(r"$(\alpha h v)^{2}$")    # ----------------------
     ax.grid(True)
     ax.legend()
     plt.savefig("Tauc-like plot")
@@ -264,7 +276,8 @@ def tauc_plotter(scaled_df, linear_region_df):
 
 
 class InteractivePlot:
-    """Interactively shows different smoothing options to show Daniel."""
+    """Interactively shows different smoothing options to show Daniel.
+    Probably don't use this"""
 
     def __init__(self, scaled_df):
         # Initialize data and plot
@@ -334,29 +347,25 @@ class InteractivePlot:
         self.fig.canvas.draw()
 
 
-def main():
+def main():         # --------------------------------------------------
     """Main function to take UV-Vis spec data and create Tauc-like plots
     determining band-gap temperature dependence."""
     low_t_data = get_data(LOW_T_FILE)
     high_t_data = get_data(HIGH_T_FILE)
     clean_data, all_baselines = data_cleaner(low_t_data, high_t_data)
     scaled_df = scale_n_differentiate(clean_data)
-
-    # TODO: HW, implement regression window, check temps
-
-    # InteractivePlot(scaled_df.iloc[:, [0, 30]])
-    # plt.show()
-
     average_ahv2 = ahv2extractor(scaled_df)
     linear_region_df = linear_region_extrapolater(scaled_df, average_ahv2)
-    tauc_plotter(scaled_df.iloc[:, [0, 1, 10, 20, 33]],
-                 linear_region_df)
+    tauc_plotter(scaled_df.iloc[:, [0, 1, 33]], linear_region_df)
     # band_gap = linear_region_df.iloc[2]
     # temps = [15, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275,
-    #          300, 325, 303, 325, 350, 375, 400, 425, 450, 475, 500, 525, 525,
-    #          550, 575, 600, 625, 650, 675, 700, 725]
+    #          300, 325, 303, 325, 350, 375, 400, 425, 450, 475, 500,
+    #          525, 525, 550, 575, 600, 625, 650, 675, 700, 725]
     # plt.plot(temps, band_gap, "-o")
     # plt.show()
+    # InteractivePlot(scaled_df.iloc[:, [0, 30]])
+    # plt.show()
+    # TODO: HW, check temps, error bars
 
 
 if __name__ == "__main__":
